@@ -2,11 +2,17 @@
 pragma solidity ^0.8.15;
 
 contract MultiSigWallet {
-    event Deposit(address indexed sender, uint amount);
-    event Submit(uint indexed txId);
+    event Deposit(address indexed sender, uint amount, uint balance);
     event Approve(address indexed owner, uint indexed txId);
     event Revoke(address indexed owner, uint indexed txId);
-    event Execute(uint indexed txId);
+    event Execute(address indexed owner, uint indexed txId);
+    event Submit(
+        address indexed owner,
+        uint indexed txIndex,
+        address indexed to,
+        uint value,
+        bytes data
+    );
 
     address[] public owners;
     mapping (address => bool) public isOwner;
@@ -35,7 +41,7 @@ contract MultiSigWallet {
         _;
     }
 
-    constructor(address[] memory _owners, uint _approvalsRequired) {
+    constructor(address[] memory _owners, uint _approvalsRequired) payable {
         owners = _owners;
 
         for(uint i; i < _owners.length; i++){
@@ -57,16 +63,18 @@ contract MultiSigWallet {
     ) public onlyOwner returns(uint txId) {
 
         txId = transactions.length;
-        Transaction memory transaction = Transaction(_to, _data, _amount, false, approvalsRequired);
+        Transaction memory transaction = Transaction({to: _to, data: _data, amount: _amount, executed: false, numOfApprovals: 0});
         transactions.push(transaction);
 
-        emit Submit(txId);
+        emit Submit(msg.sender, txId, _to, _amount, _data);
     }
 
     function approveTxn(uint _txId) public onlyOwner notExecuted(_txId) {
         require(!approvals[_txId][msg.sender], "already approved");
 
         approvals[_txId][msg.sender] = true;
+        Transaction storage txn = transactions[_txId];
+        txn.numOfApprovals += 1;
 
         emit Approve(msg.sender, _txId);
     }
@@ -75,6 +83,8 @@ contract MultiSigWallet {
         require(approvals[_txId][msg.sender], "not yet approved");
 
         approvals[_txId][msg.sender] = false;
+        Transaction storage txn = transactions[_txId];
+        txn.numOfApprovals -= 1;
 
         emit Revoke(msg.sender, _txId);
     }
@@ -83,20 +93,17 @@ contract MultiSigWallet {
         return transactions[_txId].numOfApprovals;
     }
 
-    function executeTxn(uint _txId) public payable onlyOwner notExecuted(_txId) returns(bool) {
+    function executeTxn(uint _txId) public payable onlyOwner notExecuted(_txId) returns(bool success) {
         require(getApprovalsCount(_txId) >= approvalsRequired, "not enough approvals");
 
         Transaction storage txn = transactions[_txId];
 
         require(address(this).balance > txn.amount, "not enough ETH");
 
-        (bool success, ) = payable(txn.to).call{value: txn.amount}(txn.data);
+        (success, ) = payable(txn.to).call{value: txn.amount}(txn.data);
         if(success){
             txn.executed = true;
-            emit Execute(_txId);
-            return success;
-        } else{
-            return success;
+            emit Execute(msg.sender, _txId);
         }
     }
 
@@ -105,6 +112,6 @@ contract MultiSigWallet {
     }
 
     receive() external payable {
-        emit Deposit(msg.sender, msg.value);
+        emit Deposit(msg.sender, msg.value, address(this).balance);
     }
 }
