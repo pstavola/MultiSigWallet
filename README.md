@@ -1,7 +1,8 @@
 # Multi-Sig Wallet
 
 
-A multi-sig wallet with the typical functionalities:  
+A multi-sig wallet with the typical functionalities: 
+  
     - submit transactions  
     - approve pending transactions  
     - revoke pending transactions  
