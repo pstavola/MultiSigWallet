@@ -41,7 +41,15 @@ contract MultiSigWallet {
         _;
     }
 
+    modifier txnExist(uint _txId) {
+        require(_txId < transactions.length, "transaction does not exist");
+        _;
+    }
+
     constructor(address[] memory _owners, uint _approvalsRequired) payable {
+        require(_owners.length > 0, "MultiSigWallet must have at least 1 owner");
+        require(_approvalsRequired <= _owners.length, "number of approvals must be less or equal to number of owners");
+
         owners = _owners;
 
         for(uint i; i < _owners.length; i++){
@@ -51,7 +59,6 @@ contract MultiSigWallet {
             isOwner[_owners[i]] = true;
         }
 
-        require(_approvalsRequired <= _owners.length, "number of approvals required is too big");
 
         approvalsRequired = _approvalsRequired;
     }
@@ -69,7 +76,7 @@ contract MultiSigWallet {
         emit Submit(msg.sender, txId, _to, _amount, _data);
     }
 
-    function approveTxn(uint _txId) public onlyOwner notExecuted(_txId) {
+    function approveTxn(uint _txId) public onlyOwner notExecuted(_txId) txnExist(_txId) {
         require(!approvals[_txId][msg.sender], "already approved");
 
         approvals[_txId][msg.sender] = true;
@@ -79,7 +86,7 @@ contract MultiSigWallet {
         emit Approve(msg.sender, _txId);
     }
 
-    function revokeApproval(uint _txId) public onlyOwner notExecuted(_txId) {
+    function revokeApproval(uint _txId) public onlyOwner notExecuted(_txId) txnExist(_txId) {
         require(approvals[_txId][msg.sender], "not yet approved");
 
         approvals[_txId][msg.sender] = false;
@@ -89,22 +96,16 @@ contract MultiSigWallet {
         emit Revoke(msg.sender, _txId);
     }
 
-    function getApprovalsCount(uint _txId) internal view returns(uint){
-        return transactions[_txId].numOfApprovals;
-    }
-
-    function executeTxn(uint _txId) public payable onlyOwner notExecuted(_txId) returns(bool success) {
-        require(getApprovalsCount(_txId) >= approvalsRequired, "not enough approvals");
-
+    function executeTxn(uint _txId) public payable onlyOwner notExecuted(_txId) txnExist(_txId) returns(bool success) {
         Transaction storage txn = transactions[_txId];
+        require(txn.numOfApprovals >= approvalsRequired, "not enough approvals");
 
         require(address(this).balance > txn.amount, "not enough ETH");
 
+        txn.executed = true;
         (success, ) = payable(txn.to).call{value: txn.amount}(txn.data);
-        if(success){
-            txn.executed = true;
-            emit Execute(msg.sender, _txId);
-        }
+
+        emit Execute(msg.sender, _txId);
     }
 
     function getBalance() public view returns (uint) {
@@ -115,3 +116,4 @@ contract MultiSigWallet {
         emit Deposit(msg.sender, msg.value, address(this).balance);
     }
 }
+//["0x5B38Da6a701c568545dCfcB03FcB875f56beddC4","0xAb8483F64d9C6d1EcF9b849Ae677dD3315835cb2","0x4B20993Bc481177ec7E8f571ceCaE8A9e22C02db"]
