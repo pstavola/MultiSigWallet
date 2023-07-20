@@ -76,7 +76,7 @@ contract MultiSigWallet {
         emit Submit(msg.sender, txId, _to, _amount, _data);
     }
 
-    function approveTxn(uint _txId) public onlyOwner notExecuted(_txId) txnExist(_txId) {
+    function approveTxn(uint _txId) public onlyOwner txnExist(_txId) notExecuted(_txId) {
         require(!approvals[_txId][msg.sender], "already approved");
 
         approvals[_txId][msg.sender] = true;
@@ -86,7 +86,7 @@ contract MultiSigWallet {
         emit Approve(msg.sender, _txId);
     }
 
-    function revokeApproval(uint _txId) public onlyOwner notExecuted(_txId) txnExist(_txId) {
+    function revokeApproval(uint _txId) public onlyOwner txnExist(_txId) notExecuted(_txId) {
         require(approvals[_txId][msg.sender], "not yet approved");
 
         approvals[_txId][msg.sender] = false;
@@ -96,7 +96,7 @@ contract MultiSigWallet {
         emit Revoke(msg.sender, _txId);
     }
 
-    function executeTxn(uint _txId) public payable onlyOwner notExecuted(_txId) txnExist(_txId) returns(bool success) {
+    function executeTxn(uint _txId) public payable onlyOwner txnExist(_txId) notExecuted(_txId) returns(bool success) {
         Transaction storage txn = transactions[_txId];
         require(txn.numOfApprovals >= approvalsRequired, "not enough approvals");
 
