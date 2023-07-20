@@ -115,7 +115,7 @@ describe("MultiSigWallet", function () {
         expect(transaction[3]).to.be.false;
         expect(transaction[4]).to.equal(0);
       });
-    });  
+    }); 
     
     describe("Event", function () {
       it("Should emit an event when transaction is added", async function () {
@@ -143,7 +143,7 @@ describe("MultiSigWallet", function () {
         expect(transaction[4]).to.equal(1);
       });
     });
-  
+      
     describe("Validations", function () {
       it("Should revert if transaction already approved", async function () {
         const { wallet } = await loadFixture(submitTransaction);
@@ -272,6 +272,111 @@ describe("MultiSigWallet", function () {
         await expect(wallet.connect(signers[1]).executeTxn(0))
           .to.emit(wallet, "Execute")
           .withArgs(owners[1], 0);
+      });
+    });
+
+  });
+
+  describe("Modifiers", function () {
+
+    describe("Submit", function () {
+      it("Only owners can submit transactions", async function () {
+        const { wallet, signers, receiver } = await loadFixture(deploy3of5MultiSigWallet);
+
+        const amount = ethers.utils.parseEther("1.5");
+        const abiCoder = new ethers.utils.AbiCoder;
+        const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
+
+        await expect(wallet.connect(signers[5]).submitTxn(receiver, data, amount)).to.be.revertedWith(
+          "not an owner"
+        );
+      });
+    });
+
+    describe("Approve", function () {
+      it("Only owners can approve transactions", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await expect(wallet.connect(signers[5]).approveTxn(0)).to.be.revertedWith(
+          "not an owner"
+        );
+      });
+      it("Only not executed transactions can be approved", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+        await wallet.connect(signers[3]).approveTxn(0);
+        await wallet.connect(signers[1]).executeTxn(0);
+
+        await expect(wallet.connect(signers[4]).approveTxn(0)).to.be.revertedWith(
+          "already executed"
+        );
+      });
+      it("Only existing transactions can be approved", async function () {
+        const { wallet } = await loadFixture(deploy3of5MultiSigWallet);
+
+        await expect(wallet.approveTxn(0)).to.be.revertedWith(
+          "transaction does not exist"
+        );
+      });
+    });
+
+    describe("Revoke", function () {
+      it("Only owners can revoke approved transactions", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await expect(wallet.connect(signers[5]).revokeApproval(0)).to.be.revertedWith(
+          "not an owner"
+        );
+      });
+      it("Only not executed transactions can be approved", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+        await wallet.connect(signers[3]).approveTxn(0);
+        await wallet.connect(signers[1]).executeTxn(0);
+
+        await expect(wallet.connect(signers[4]).revokeApproval(0)).to.be.revertedWith(
+          "already executed"
+        );
+      });
+      it("Only existing transactions can be approved", async function () {
+        const { wallet } = await loadFixture(deploy3of5MultiSigWallet);
+
+        await expect(wallet.revokeApproval(0)).to.be.revertedWith(
+          "transaction does not exist"
+        );
+      });
+    });
+
+    describe("Execute", function () {
+      it("Only owners can execute transactions", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await expect(wallet.connect(signers[5]).executeTxn(0)).to.be.revertedWith(
+          "not an owner"
+        );
+      });
+      it("Only not executed transactions can be executed", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+        await wallet.connect(signers[3]).approveTxn(0);
+        await wallet.connect(signers[1]).executeTxn(0);
+
+        await expect(wallet.connect(signers[4]).executeTxn(0)).to.be.revertedWith(
+          "already executed"
+        );
+      });
+      it("Only existing transactions can be approved", async function () {
+        const { wallet } = await loadFixture(deploy3of5MultiSigWallet);
+
+        await expect(wallet.approveTxn(0)).to.be.revertedWith(
+          "transaction does not exist"
+        );
       });
     });
 
