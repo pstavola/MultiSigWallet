@@ -10,8 +10,9 @@ describe("MultiSigWallet", function () {
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshopt in every test.
   async function deploy3of5MultiSigWallet() {
-    const [owner1, owner2, owner3, owner4, owner5] = await ethers.getSigners(); 
+    const [owner1, owner2, owner3, owner4, owner5, address1] = await ethers.getSigners(); 
     const owners = [owner1.address, owner2.address, owner3.address, owner4.address, owner5.address];
+    const receiver = address1.address;
     const approvalsRequired = 3;
     const depositAmount = ethers.utils.parseEther("100");
    
@@ -19,7 +20,7 @@ describe("MultiSigWallet", function () {
     const MultiSigWallet = await ethers.getContractFactory("MultiSigWallet");
     const wallet = await MultiSigWallet.deploy(owners, approvalsRequired, {value: depositAmount});
 
-    return { wallet, owners, approvalsRequired, depositAmount };
+    return { wallet, owners, approvalsRequired, depositAmount, receiver };
   }
 
   describe("Deployment", function () {
@@ -86,6 +87,40 @@ describe("MultiSigWallet", function () {
       await expect(MultiSigWallet.deploy(owners, approvalsRequired, {value: depositAmount})).to.be.revertedWith(
         "duplicated owner"
       );
+    });
+  });
+
+  describe("Submit transaction", function () {
+
+    describe("Submit", function () {
+      it("Should add a transaction proposal to the transactions list to be approved", async function () {
+        const { wallet, receiver } = await loadFixture(deploy3of5MultiSigWallet);
+
+        const amount = ethers.utils.parseEther("1.5");
+        const abiCoder = new ethers.utils.AbiCoder;
+        const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
+        await wallet.submitTxn(receiver, data, amount);
+        const transaction = await wallet.transactions(0);
+
+        expect(transaction[0]).to.equal(receiver);
+        expect(transaction[1]).to.equal(data);
+        expect(transaction[2]).to.equal(amount);
+        expect(transaction[3]).to.equal(false);
+        expect(transaction[4]).to.equal(0);
+      });
+    });  
+    
+    describe("Event", function () {
+      it("Should emit an event when transaction is added", async function () {
+        const { wallet, owners, receiver } = await loadFixture(deploy3of5MultiSigWallet);
+        const amount = ethers.utils.parseEther("1.5");
+        const abiCoder = new ethers.utils.AbiCoder;
+        const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
+
+        await expect(wallet.submitTxn(receiver, data, amount))
+          .to.emit(wallet, "Submit")
+          .withArgs(owners[0], 0, receiver, amount, data);
+      });
     });
   });
 });
