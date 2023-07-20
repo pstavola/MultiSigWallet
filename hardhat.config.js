@@ -2,12 +2,12 @@ require("@nomiclabs/hardhat-waffle");
 require("@nomiclabs/hardhat-etherscan");
 
 module.exports = {
-  solidity: "0.8.9",
+  solidity: "0.8.15",
   networks: {
     hardhat: {
       chainId: 1337
     },
-    goerli: {
+    /* goerli: {
       url: "https://goerli.infura.io/v3/1fc7c7c3701c4083b769e561ae251f9a",
       accounts: [process.env.pk]
     },
@@ -24,7 +24,7 @@ module.exports = {
     polygon: {
       url: "https://polygon-rpc.com/",
       accounts: [process.env.pk]
-    }
+    } */
   },
   etherscan: {
     apiKey:  {
