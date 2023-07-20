@@ -167,4 +167,42 @@ describe("MultiSigWallet", function () {
     });
 
   });
+
+  describe("Revoke approval", function () {
+
+    describe("Revoke", function () {
+      it("Should revoke an existing transaction approval", async function () {
+        const { wallet } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        await wallet.revokeApproval(0);
+        const transaction = await wallet.transactions(0);
+
+        expect(transaction[4]).to.equal(0);
+      });
+    });
+  
+    describe("Validations", function () {
+      it("Should revert if transaction not yet approved", async function () {
+        const { wallet } = await loadFixture(submitTransaction);
+
+        await expect(wallet.revokeApproval(0)).to.be.revertedWith(
+          "not yet approved"
+        );
+      });
+    });
+
+    describe("Event", function () {
+      it("Should emit an event when transaction approval is revoked", async function () {
+        const { wallet, owners } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+
+        await expect(wallet.revokeApproval(0))
+          .to.emit(wallet, "Revoke")
+          .withArgs(owners[0], 0);
+      });
+    });
+
+  });
 });
