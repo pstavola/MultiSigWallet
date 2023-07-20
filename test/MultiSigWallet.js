@@ -10,9 +10,9 @@ describe("MultiSigWallet", function () {
   // We use loadFixture to run this setup once, snapshot that state,
   // and reset Hardhat Network to that snapshopt in every test.
   async function deploy3of5MultiSigWallet() {
-    const [owner1, owner2, owner3, owner4, owner5, address1] = await ethers.getSigners(); 
-    const owners = [owner1.address, owner2.address, owner3.address, owner4.address, owner5.address];
-    const receiver = address1.address;
+    const signers = await ethers.getSigners();
+    const owners = [signers[0].address, signers[1].address, signers[2].address, signers[3].address, signers[4].address];
+    const receiver = signers[5].address;
     const approvalsRequired = 3;
     const depositAmount = ethers.utils.parseEther("100");
    
@@ -20,7 +20,18 @@ describe("MultiSigWallet", function () {
     const MultiSigWallet = await ethers.getContractFactory("MultiSigWallet");
     const wallet = await MultiSigWallet.deploy(owners, approvalsRequired, {value: depositAmount});
 
-    return { wallet, owners, approvalsRequired, depositAmount, receiver };
+    return { wallet, signers, owners, approvalsRequired, depositAmount, receiver };
+  }
+
+  async function submitTransaction() {
+    const { wallet, signers, owners, receiver } = await loadFixture(deploy3of5MultiSigWallet);
+
+    const amount = ethers.utils.parseEther("1.5");
+    const abiCoder = new ethers.utils.AbiCoder;
+    const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
+    await wallet.connect(signers[1]).submitTxn(receiver, data, amount);
+
+    return { wallet, owners, receiver, data, amount };
   }
 
   describe("Deployment", function () {
@@ -94,12 +105,8 @@ describe("MultiSigWallet", function () {
 
     describe("Submit", function () {
       it("Should add a transaction proposal to the transactions list to be approved", async function () {
-        const { wallet, receiver } = await loadFixture(deploy3of5MultiSigWallet);
+        const { wallet, receiver, data, amount } = await loadFixture(submitTransaction);
 
-        const amount = ethers.utils.parseEther("1.5");
-        const abiCoder = new ethers.utils.AbiCoder;
-        const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
-        await wallet.submitTxn(receiver, data, amount);
         const transaction = await wallet.transactions(0);
 
         expect(transaction[0]).to.equal(receiver);
@@ -122,5 +129,42 @@ describe("MultiSigWallet", function () {
           .withArgs(owners[0], 0, receiver, amount, data);
       });
     });
+  });
+
+  describe("Approve transaction", function () {
+
+    describe("Approve", function () {
+      it("Should approve an existing transaction", async function () {
+        const { wallet } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        const transaction = await wallet.transactions(0);
+
+        expect(transaction[4]).to.equal(1);
+      });
+    });
+  
+    describe("Validations", function () {
+      it("Should revert if transaction already approved", async function () {
+        const { wallet } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+
+        await expect(wallet.approveTxn(0)).to.be.revertedWith(
+          "already approved"
+        );
+      });
+    });
+
+    describe("Event", function () {
+      it("Should emit an event when transaction is added", async function () {
+        const { wallet, owners } = await loadFixture(submitTransaction);
+
+        await expect(wallet.approveTxn(0))
+          .to.emit(wallet, "Approve")
+          .withArgs(owners[0], 0);
+      });
+    });
+
   });
 });
