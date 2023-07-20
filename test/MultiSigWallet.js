@@ -31,7 +31,7 @@ describe("MultiSigWallet", function () {
     const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
     await wallet.connect(signers[1]).submitTxn(receiver, data, amount);
 
-    return { wallet, owners, receiver, data, amount };
+    return { wallet, signers, owners, receiver, data, amount };
   }
 
   describe("Deployment", function () {
@@ -112,7 +112,7 @@ describe("MultiSigWallet", function () {
         expect(transaction[0]).to.equal(receiver);
         expect(transaction[1]).to.equal(data);
         expect(transaction[2]).to.equal(amount);
-        expect(transaction[3]).to.equal(false);
+        expect(transaction[3]).to.be.false;
         expect(transaction[4]).to.equal(0);
       });
     });  
@@ -201,6 +201,77 @@ describe("MultiSigWallet", function () {
         await expect(wallet.revokeApproval(0))
           .to.emit(wallet, "Revoke")
           .withArgs(owners[0], 0);
+      });
+    });
+
+  });
+
+  describe("Execute transaction", function () {
+
+    describe("Execute", function () {
+      it("Should execute an existing transaction", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        const transactionBeforeExecution = await wallet.transactions(0);
+        const initialReceiverBalance = await ethers.provider.getBalance(transactionBeforeExecution[0]);
+        const initialBalanceAsNum = Number(ethers.utils.formatEther(initialReceiverBalance));
+        const amount = Number(ethers.utils.formatEther(transactionBeforeExecution[2]));
+        const expectedFinalBalance = initialBalanceAsNum + amount;
+
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+        await wallet.connect(signers[3]).approveTxn(0);
+        await wallet.connect(signers[1]).executeTxn(0);
+
+        const transactionAfterExecution = await wallet.transactions(0);
+        const finalReceiverBalance = await ethers.provider.getBalance(transactionAfterExecution[0]);
+        const finalReceiverBalanceAsNum = Number(ethers.utils.formatEther(finalReceiverBalance));
+        const transactionExecuted = transactionAfterExecution[3];
+
+        expect(finalReceiverBalanceAsNum).to.equal(expectedFinalBalance);
+        expect(transactionExecuted).to.be.true;
+      });
+    });
+  
+    describe("Validations", function () {
+      it("Should revert if transaction does not have enough approvals", async function () {
+        const { wallet, signers } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+
+        await expect(wallet.connect(signers[1]).executeTxn(0)).to.be.revertedWith(
+          "not enough approvals"
+        );
+      });
+      it("Should revert if contract does not enough ETH", async function () {
+        const { wallet, signers, owners, receiver } = await loadFixture(deploy3of5MultiSigWallet);
+
+        const amount = ethers.utils.parseEther("100.5");
+        const abiCoder = new ethers.utils.AbiCoder;
+        const data = abiCoder.encode(["string", "bytes"], ["TwitterContestV1", abiCoder.encode(["bytes"], ["0x"])]);
+        await wallet.connect(signers[1]).submitTxn(receiver, data, amount);
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+        await wallet.connect(signers[3]).approveTxn(0);
+
+        await expect(wallet.connect(signers[1]).executeTxn(0)).to.be.revertedWith(
+          "not enough ETH"
+        );
+      });
+    });
+
+    describe("Event", function () {
+      it("Should emit an event when transaction approval is revoked", async function () {
+        const { wallet, owners, signers } = await loadFixture(submitTransaction);
+
+        await wallet.approveTxn(0);
+        await wallet.connect(signers[2]).approveTxn(0);
+        await wallet.connect(signers[3]).approveTxn(0);
+
+        await expect(wallet.connect(signers[1]).executeTxn(0))
+          .to.emit(wallet, "Execute")
+          .withArgs(owners[1], 0);
       });
     });
 
